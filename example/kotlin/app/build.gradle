@@ -6,7 +6,9 @@ apply plugin: 'kotlin-android'
 
 react {
     root = file("../../..")
-    entryFile = file("example/index.js")
+    entryFile = file("example/index.tsx")
+
+    autolinkLibrariesWithApp()
 }
 
 def jscFlavor = 'org.webkit:android-jsc:+'
@@ -54,4 +56,3 @@ dependencies {
     }
 }
 
-apply from: file("../../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)

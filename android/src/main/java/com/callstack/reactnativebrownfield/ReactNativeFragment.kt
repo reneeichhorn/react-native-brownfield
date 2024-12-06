@@ -14,6 +14,7 @@ import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.LifecycleState
 import com.facebook.react.devsupport.DoubleTapReloadRecognizer
+import com.facebook.react.interfaces.fabric.ReactSurface
 import com.facebook.react.modules.core.DefaultHardwareBackBtnHandler
 import com.facebook.react.modules.core.PermissionAwareActivity
 import com.facebook.react.modules.core.PermissionListener
@@ -23,7 +24,7 @@ private const val INITIAL_PROPS = "com.callstack.reactnativebrownfield.FRAGMENT_
 
 class ReactNativeFragment : Fragment(), PermissionAwareActivity {
 
-    private var reactRootView: ReactRootView? = null
+    private var reactSurface: ReactSurface? = null
     private lateinit var doubleTapReloadRecognizer: DoubleTapReloadRecognizer
     private lateinit var permissionsCallback: Callback
     private var permissionListener: PermissionListener? = null
@@ -35,12 +36,8 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
 
         doubleTapReloadRecognizer = DoubleTapReloadRecognizer()
 
-        reactRootView = ReactRootView(context)
-        reactRootView?.startReactApplication(
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager,
-            moduleName,
-            initialProps
-        )
+        reactSurface = ReactNativeBrownfield.shared.reactHost.createSurface(this.requireContext(), moduleName ?: "index", initialProps)
+        reactSurface?.start()
     }
 
 
@@ -49,13 +46,13 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        return reactRootView!!
+        return reactSurface!!.view!!.rootView
     }
 
     override fun onResume() {
         super.onResume()
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager?.onHostResume(
+        if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onHostResume(
                 activity,
                 activity as DefaultHardwareBackBtnHandler
             )
@@ -64,8 +61,8 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
 
     override fun onPause() {
         super.onPause()
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager?.onHostPause(
+        if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onHostPause(
                 activity
             )
         }
@@ -73,15 +70,22 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
 
     override fun onDestroy() {
         super.onDestroy()
-        reactRootView?.unmountReactApplication()
-        reactRootView = null
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            val reactInstanceMgr = ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager
-
-            if (reactInstanceMgr.lifecycleState != LifecycleState.RESUMED) {
-                reactInstanceMgr.onHostDestroy(activity)
+        reactSurface?.stop()
+        reactSurface = null
+        if (ReactNativeBrownfield.shared.hasContext()) {
+            if (ReactNativeBrownfield.shared.reactHost.lifecycleState != LifecycleState.RESUMED) {
+                ReactNativeBrownfield.shared.reactHost.onHostDestroy(activity)
             }
         }
+    }
+
+    override fun requestPermissions(
+        permissions: Array<String>,
+        requestCode: Int,
+        listener: PermissionListener?
+    ) {
+        permissionListener = listener
+        this.requestPermissions(permissions, requestCode)
     }
 
     override fun onRequestPermissionsResult(
@@ -111,21 +115,11 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
         return requireActivity().checkSelfPermission(permission)
     }
 
-    @TargetApi(Build.VERSION_CODES.M)
-    override fun requestPermissions(
-        permissions: Array<String>,
-        requestCode: Int,
-        listener: PermissionListener
-    ) {
-        permissionListener = listener
-        this.requestPermissions(permissions, requestCode)
-    }
-
     fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         var handled = false
-        if (ReactNativeBrownfield.shared.reactNativeHost.useDeveloperSupport && ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
+        if (ReactNativeBrownfield.shared.hasContext() && ReactNativeBrownfield.shared.hasDevSupport()) {
             if (keyCode == KeyEvent.KEYCODE_MENU) {
-                ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.showDevOptionsDialog()
+                ReactNativeBrownfield.shared.reactHost.devSupportManager!!.showDevOptionsDialog()
                 handled = true
             }
             val didDoubleTapR = activity?.currentFocus?.let {
@@ -133,7 +127,7 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
                     .didDoubleTapR(keyCode, it)
             }
             if (didDoubleTapR == true) {
-                ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.devSupportManager.handleReloadJS()
+                ReactNativeBrownfield.shared.reactHost.devSupportManager!!.handleReloadJS()
                 handled = true
             }
         }
@@ -143,8 +137,8 @@ class ReactNativeFragment : Fragment(), PermissionAwareActivity {
     fun onBackPressed(backBtnHandler: DefaultHardwareBackBtnHandler) {
         if(ReactNativeBrownfieldModule.shouldPopToNative) {
             backBtnHandler.invokeDefaultOnBackPressed()
-        } else if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.onBackPressed()
+        } else if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onBackPressed()
         }
     }
 

@@ -14,14 +14,17 @@ import com.facebook.react.modules.core.PermissionListener
 import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.common.DebugServerException
+import com.facebook.react.common.LifecycleState
+import com.facebook.react.interfaces.fabric.ReactSurface
 import com.facebook.react.modules.core.DefaultHardwareBackBtnHandler
 import com.facebook.react.modules.core.PermissionAwareActivity
+import com.facebook.react.views.view.ReactViewManager
 
 private const val MODULE_NAME = "com.callstack.reactnativebrownfield.ACTIVITY_MODULE_NAME"
 private const val INITIAL_PROPS = "com.callstack.reactnativebrownfield.ACTIVITY_INITIAL_PROPS"
 
 class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, PermissionAwareActivity {
-    private var reactRootView: ReactRootView? = null
+    private var reactSurface: ReactSurface? = null
     private lateinit var doubleTapReloadRecognizer: DoubleTapReloadRecognizer
     private lateinit var permissionsCallback: Callback
     private var permissionListener: PermissionListener? = null
@@ -32,39 +35,37 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
         val moduleName = intent.getStringExtra(MODULE_NAME)
         val initialProps = intent.getBundleExtra(INITIAL_PROPS)
 
-        reactRootView = ReactRootView(this)
-        reactRootView?.startReactApplication(
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager,
-            moduleName,
-            initialProps
-        )
+
+        val reactSurface = ReactNativeBrownfield.shared.reactHost.createSurface(this, moduleName ?: "index", initialProps)
+        reactSurface?.start()
 
         supportActionBar?.hide()
-        setContentView(reactRootView)
+        setContentView(reactSurface?.view)
         doubleTapReloadRecognizer = DoubleTapReloadRecognizer()
         checkPackagerConnection()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        reactRootView?.unmountReactApplication()
-        reactRootView = null
 
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager?.onHostDestroy(this)
+        reactSurface?.stop()
+        reactSurface = null
+
+        if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onHostDestroy(this)
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager?.onActivityResult(this, requestCode, resultCode, data)
+        if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onActivityResult(this, requestCode, resultCode, data)
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()
-            && ReactNativeBrownfield.shared.reactNativeHost.useDeveloperSupport
+        if (ReactNativeBrownfield.shared.hasContext()
+            && ReactNativeBrownfield.shared.hasDevSupport()
             && keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
         ) {
             event.startTracking()
@@ -78,10 +79,10 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
             onBackPressed()
             return true
         }
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()
-            && ReactNativeBrownfield.shared.reactNativeHost.useDeveloperSupport) {
+        if (ReactNativeBrownfield.shared.hasContext()
+            && ReactNativeBrownfield.shared.hasDevSupport()) {
             if (keyCode == KeyEvent.KEYCODE_MENU) {
-                ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.showDevOptionsDialog()
+                ReactNativeBrownfield.shared.reactHost.devSupportManager!!.showDevOptionsDialog()
                 return true
             }
             val didDoubleTapR = this.currentFocus?.let {
@@ -89,7 +90,7 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
                     .didDoubleTapR(keyCode, it)
             }
             if (didDoubleTapR == true) {
-                ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.devSupportManager.handleReloadJS()
+                ReactNativeBrownfield.shared.reactHost.devSupportManager!!.handleReloadJS()
                 return true
             }
         }
@@ -97,11 +98,11 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
     }
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()
-            && ReactNativeBrownfield.shared.reactNativeHost.useDeveloperSupport
+        if (ReactNativeBrownfield.shared.hasContext()
+            && ReactNativeBrownfield.shared.hasDevSupport()
             && keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
         ) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.showDevOptionsDialog()
+            ReactNativeBrownfield.shared.reactHost.devSupportManager!!.showDevOptionsDialog()
             return true
         }
         return false
@@ -110,23 +111,13 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
     override fun onBackPressed() {
         if(ReactNativeBrownfieldModule.shouldPopToNative) {
             super.invokeDefaultOnBackPressed()
-        } else if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance()) {
-            ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.onBackPressed()
+        } else if (ReactNativeBrownfield.shared.hasContext()) {
+            ReactNativeBrownfield.shared.reactHost.onBackPressed()
         }
     }
 
     override fun invokeDefaultOnBackPressed() {
         super.onBackPressed()
-    }
-
-    @TargetApi(Build.VERSION_CODES.M)
-    override fun requestPermissions(
-        permissions: Array<String>,
-        requestCode: Int,
-        listener: PermissionListener
-    ) {
-        permissionListener = listener
-        this.requestPermissions(permissions, requestCode)
     }
 
     override fun onRequestPermissionsResult(
@@ -149,10 +140,10 @@ class ReactNativeActivity : ReactActivity(), DefaultHardwareBackBtnHandler, Perm
     }
 
     private fun checkPackagerConnection() {
-        if (ReactNativeBrownfield.shared.reactNativeHost.hasInstance() && ReactNativeBrownfield.shared.reactNativeHost.useDeveloperSupport) {
+        if (ReactNativeBrownfield.shared.hasContext() && ReactNativeBrownfield.shared.hasDevSupport()) {
             val devSupportManager =
-                    ReactNativeBrownfield.shared.reactNativeHost.reactInstanceManager.devSupportManager
-            val url = devSupportManager.sourceUrl
+                    ReactNativeBrownfield.shared.reactHost.devSupportManager!!
+            val url = devSupportManager.sourceUrl ?: "unknown"
             devSupportManager?.isPackagerRunning { isRunning ->
                 if (!isRunning) {
                     val error = Error()

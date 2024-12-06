@@ -1,3 +1,5 @@
+const path = require('path');
+
 module.exports = {
   presets: ['module:@react-native/babel-preset'],
   plugins: [
@@ -5,7 +7,7 @@ module.exports = {
       'module-resolver',
       {
         alias: {
-          '@callstack/react-native-brownfield': './src',
+          '@callstack/react-native-brownfield': path.join(__dirname, './src'),
         },
       },
     ],

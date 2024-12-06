@@ -4,6 +4,8 @@ apply plugin: "com.facebook.react"
 react {
     root = file("../../..")
     entryFile = file("example/index.js")
+
+    autolinkLibrariesWithApp()
 }
 
 
@@ -52,5 +54,3 @@ dependencies {
     }
 }
 
-apply from: file("../../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle");
-applyNativeModulesAppBuildGradle(project)

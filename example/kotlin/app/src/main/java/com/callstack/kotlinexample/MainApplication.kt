@@ -5,6 +5,7 @@ import android.util.Log
 import com.callstack.reactnativebrownfield.ReactNativeBrownfield
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeHost
 
 import java.util.HashMap
@@ -25,4 +26,7 @@ class MainApplication : Application(), ReactApplication {
 
     override val reactNativeHost: ReactNativeHost
         get() = ReactNativeBrownfield.shared.reactNativeHost
+
+    override val reactHost: ReactHost?
+        get() = ReactNativeBrownfield.shared.reactHost
 }
